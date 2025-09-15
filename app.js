@@ -24,7 +24,8 @@ app.use(cors({
       process.env.FRONTEND_URL || 'http://localhost:3000',
       'http://localhost:3000',
       'http://localhost:3001',
-      'https://cloud.bytematic.in'
+      'https://cloud.bytematic.in',
+      'https://byte-cloud-frontend.vercel.app'
     ];
     
     if (allowedOrigins.includes(origin)) {
@@ -47,8 +48,26 @@ app.use(cors({
   optionsSuccessStatus: 204
 }));
 app.use(morgan('combined'));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Skip body parsing for file upload routes
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
+  const isFileUpload = req.path.includes('/upload') || contentType.includes('multipart/form-data');
+  
+  if (isFileUpload) {
+    // Skip body parsing for file uploads - let multer handle it
+    return next();
+  }
+  
+  // Apply JSON and URL-encoded parsing for other routes
+  express.json({ limit: '500mb' })(req, res, (err) => {
+    if (err) {
+      console.error('JSON parsing error:', err);
+      return res.status(400).json({ error: 'Invalid JSON format' });
+    }
+    express.urlencoded({ extended: true, limit: '500mb', parameterLimit: 50000 })(req, res, next);
+  });
+});
 
 // Set longer timeouts for file operations
 app.use((req, res, next) => {

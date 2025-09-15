@@ -15,6 +15,20 @@ class EmailService {
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
+      },
+      // Add connection timeout settings
+      connectionTimeout: 60000, // 60 seconds
+      greetingTimeout: 30000,   // 30 seconds
+      socketTimeout: 60000,     // 60 seconds
+      // Add pool settings for better connection management
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
+      // Add retry settings
+      retryDelay: 5000,
+      // Add TLS options for better compatibility
+      tls: {
+        rejectUnauthorized: process.env.NODE_ENV === 'production'
       }
     };
 
@@ -54,7 +68,10 @@ class EmailService {
     }
   }
 
-  async sendPasswordResetEmail(userEmail, userName, resetToken) {
+  async sendPasswordResetEmail(userEmail, userName, resetToken, retryCount = 0) {
+    const maxRetries = 3;
+    const retryDelay = 5000; // 5 seconds
+    
     try {
       const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
       
@@ -70,8 +87,16 @@ class EmailService {
       console.log('✅ Password reset email sent successfully:', result.messageId);
       return result;
     } catch (error) {
-      console.error('❌ Failed to send password reset email:', error);
-      throw new Error('Failed to send password reset email');
+      console.error('❌ Failed to send password reset email (attempt ' + (retryCount + 1) + '):', error.code || error.message);
+      
+      // Retry on connection timeouts or network errors
+      if (retryCount < maxRetries && (error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED')) {
+        console.log(`🔄 Retrying email send in ${retryDelay/1000} seconds... (${retryCount + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        return this.sendPasswordResetEmail(userEmail, userName, resetToken, retryCount + 1);
+      }
+      
+      throw new Error('Failed to send password reset email after ' + (retryCount + 1) + ' attempts');
     }
   }
 

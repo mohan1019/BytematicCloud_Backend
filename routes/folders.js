@@ -1,6 +1,7 @@
 const express = require('express');
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
+const backblazeService = require('../config/backblaze');
 
 const router = express.Router();
 
@@ -323,7 +324,6 @@ router.delete('/bulk/mixed', authenticateToken, async (req, res) => {
 
       for (const file of deletableFiles) {
         try {
-          const backblazeService = require('../services/backblaze');
           try {
             await backblazeService.deleteFile(file.backblaze_file_id, file.name);
           } catch (b2Error) {

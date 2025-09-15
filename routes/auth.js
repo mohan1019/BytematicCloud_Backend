@@ -176,7 +176,6 @@ router.post('/forgot-password', async (req, res) => {
       'SELECT id, name, email FROM users WHERE email = $1',
       [email.toLowerCase()]
     );
-
     if (userResult.rows.length === 0) {
       // Don't reveal if email exists or not for security
       return res.json({ 

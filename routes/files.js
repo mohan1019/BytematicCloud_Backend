@@ -57,7 +57,7 @@ const uploadMultiple = multer({
   storage: storage,
   limits: {
     fileSize: 1024 * 1024 * 1024, // 1GB limit per file
-    files: 20 // Maximum 20 files at once
+    files: 500 // Maximum 500 files at once
   },
   fileFilter: (req, file, cb) => {
     // Use the same file filter as single upload
@@ -89,7 +89,7 @@ const uploadMultiple = multer({
 });
 
 // Multiple file upload endpoint
-router.post('/upload/multiple', authenticateToken, uploadMultiple.array('files', 20), async (req, res) => {
+router.post('/upload/multiple', authenticateToken, uploadMultiple.array('files', 500), async (req, res) => {
   try {
     const { folder_id } = req.body;
     const files = req.files;

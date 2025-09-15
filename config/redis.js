@@ -4,47 +4,61 @@ class RedisService {
   constructor() {
     this.client = null;
     this.isConnected = false;
+    this.isProduction = process.env.NODE_ENV === 'production';
   }
 
   async connect() {
     try {
-      this.client = redis.createClient({
-        url: process.env.REDIS_URL || 'redis://localhost:6379',
-        password: process.env.REDIS_PASSWORD || undefined,
-        socket: {
-          connectTimeout: 10000,
-          lazyConnect: true,
-        },
-        retry_strategy: (options) => {
-          if (options.error && options.error.code === 'ECONNREFUSED') {
-            console.log('Redis server connection refused');
-            return new Error('Redis server connection refused');
-          }
-          if (options.total_retry_time > 1000 * 60 * 60) {
-            return new Error('Retry time exhausted');
-          }
-          if (options.attempt > 10) {
-            return undefined;
-          }
-          return Math.min(options.attempt * 100, 3000);
-        }
-      });
+      if (this.isProduction) {
+        // Use @upstash/redis for production
+        const { Redis } = require('@upstash/redis');
+        this.client = Redis.fromEnv()
 
-      this.client.on('error', (err) => {
-        console.error('Redis Client Error:', err);
-        this.isConnected = false;
-      });
-
-      this.client.on('connect', () => {
-        console.log('✅ Redis connected successfully');
+        
+        // Test connection
+        await this.client.ping();
         this.isConnected = true;
-      });
+        console.log('✅ Upstash Redis connected successfully');
+      } else {
+        // Use regular redis client for local development
+        this.client = redis.createClient({
+          url: process.env.REDIS_URL || 'redis://localhost:6379',
+          password: process.env.REDIS_PASSWORD || undefined,
+          socket: {
+            connectTimeout: 10000,
+            lazyConnect: true,
+          },
+          retry_strategy: (options) => {
+            if (options.error && options.error.code === 'ECONNREFUSED') {
+              console.log('Redis server connection refused');
+              return new Error('Redis server connection refused');
+            }
+            if (options.total_retry_time > 1000 * 60 * 60) {
+              return new Error('Retry time exhausted');
+            }
+            if (options.attempt > 10) {
+              return undefined;
+            }
+            return Math.min(options.attempt * 100, 3000);
+          }
+        });
 
-      this.client.on('reconnecting', () => {
-        console.log('🔄 Redis reconnecting...');
-      });
+        this.client.on('error', (err) => {
+          console.error('Redis Client Error:', err);
+          this.isConnected = false;
+        });
 
-      await this.client.connect();
+        this.client.on('connect', () => {
+          console.log('✅ Redis connected successfully');
+          this.isConnected = true;
+        });
+
+        this.client.on('reconnecting', () => {
+          console.log('🔄 Redis reconnecting...');
+        });
+
+        await this.client.connect();
+      }
     } catch (error) {
       console.warn('⚠️ Redis connection failed. Running without cache:', error.message);
       this.isConnected = false;
@@ -56,7 +70,13 @@ class RedisService {
     
     try {
       const serializedValue = JSON.stringify(value);
-      await this.client.setEx(key, expireInSeconds, serializedValue);
+      if (this.isProduction) {
+        // Upstash Redis syntax
+        await this.client.setex(key, expireInSeconds, serializedValue);
+      } else {
+        // Regular Redis syntax
+        await this.client.setEx(key, expireInSeconds, serializedValue);
+      }
       return true;
     } catch (error) {
       console.error('Redis SET error:', error);
@@ -133,11 +153,12 @@ class RedisService {
   }
 
   async disconnect() {
-    if (this.client) {
+    if (this.client && !this.isProduction) {
       await this.client.disconnect();
       this.isConnected = false;
       console.log('📴 Redis disconnected');
     }
+    // Note: Upstash Redis doesn't need explicit disconnection
   }
 }
 
